@@ -166,13 +166,25 @@ CRAWLER = {
 
 VULN_SCAN = {
     # nuclei template severity filter  (info,low,medium,high,critical)
-    "severity":     "low,medium,high,critical",
-    # nuclei concurrency
-    "concurrency":  25,
-    # nuclei rate limit (req/sec)
-    "rate_limit":   150,
-    # nuclei timeout per template
-    "timeout":      10,
+    "severity":       "low,medium,high,critical",
+    # parallel template runners (-c); raise to 100 on high-core machines
+    "concurrency":    50,
+    # hosts processed per template batch (-bs)
+    "bulk_size":      50,
+    # requests per second hard cap (-rl); raise cautiously on fast networks
+    "rate_limit":     500,
+    # per-request timeout in seconds (-timeout); lower = fail faster
+    "timeout":        5,
+    # retry count on transient failures (-retries); 0 = no retries for speed
+    "retries":        0,
+    # scanning strategy (-ss): "template-spray" is faster when target count > 1
+    # use "host-spray" if you need per-host result ordering
+    "scan_strategy":  "template-spray",
+    # comma-separated template tags to exclude (-etags)
+    # "headless" skips browser-based templates that spin up Chromium (very slow)
+    "exclude_tags":   "headless",
+    # pull latest templates before each scan; set False to skip on repeat runs
+    "update_templates": True,
 }
 
 # ---------------------------------------------------------------------------

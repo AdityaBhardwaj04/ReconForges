@@ -27,13 +27,16 @@ log = get_logger("modules.vuln_scan")
 # ---------------------------------------------------------------------------
 
 def _update_nuclei_templates() -> None:
-    """Pull the latest Nuclei template database (best-effort)."""
+    """Pull the latest Nuclei template database (best-effort, skippable via config)."""
+    if not VULN_SCAN.get("update_templates", True):
+        log.debug("[nuclei] Template update skipped (update_templates=False).")
+        return
     if not tool_available(TOOL_PATHS["nuclei"]):
         return
 
     log.info("[nuclei] Updating templates …")
     result = run_command(
-        [TOOL_PATHS["nuclei"], "-update-templates", "-silent"],
+        [TOOL_PATHS["nuclei"], "-update-templates", "-silent", "-duc"],
         timeout=120,
     )
     if result.success:
@@ -46,13 +49,29 @@ def _run_nuclei(hosts_file: str, output_file: str) -> List[str]:
     """
     Execute Nuclei against the host list in *hosts_file*.
 
+    Speed flags used
+    ----------------
+    -c   concurrency    — parallel template runners (default: 50)
+    -bs  bulk_size      — hosts per template batch  (default: 50)
+    -rl  rate_limit     — requests/sec hard cap     (default: 500)
+    -timeout            — per-request timeout        (default: 5s)
+    -retries 0          — no retries on failure (biggest single speedup)
+    -ss template-spray  — scan all hosts per template before moving on
+    -etags headless     — skip Chromium-based templates (very slow)
+    -nh                 — skip httpx probe (host_discovery already ran it)
+    -duc                — disable update check at scan time
+
     Returns the raw finding lines written to *output_file*.
     """
     cfg         = VULN_SCAN
-    severity    = cfg.get("severity",    "low,medium,high,critical")
-    concurrency = cfg.get("concurrency", 25)
-    rate_limit  = cfg.get("rate_limit",  150)
-    timeout     = cfg.get("timeout",     10)
+    severity    = cfg.get("severity",      "low,medium,high,critical")
+    concurrency = cfg.get("concurrency",   50)
+    bulk_size   = cfg.get("bulk_size",     50)
+    rate_limit  = cfg.get("rate_limit",    500)
+    timeout     = cfg.get("timeout",       5)
+    retries     = cfg.get("retries",       0)
+    strategy    = cfg.get("scan_strategy", "template-spray")
+    excl_tags   = cfg.get("exclude_tags",  "headless")
 
     # Allow --rate-limit CLI flag to override the module default
     scope_rl = _root_cfg.SCOPE.get("rate_limit", 0)
@@ -62,20 +81,28 @@ def _run_nuclei(hosts_file: str, output_file: str) -> List[str]:
 
     cmd = [
         TOOL_PATHS["nuclei"],
-        "-l",       hosts_file,
-        "-o",       output_file,
-        "-s",       severity,          # severity filter (info/low/medium/high/critical)
-        "-c",       str(concurrency),  # max parallel templates
-        "-rl",      str(rate_limit),   # requests per second cap
-        "-timeout", str(timeout),      # per-request timeout
+        "-l",        hosts_file,
+        "-o",        output_file,
+        "-s",        severity,           # severity filter
+        "-c",        str(concurrency),   # parallel template runners
+        "-bs",       str(bulk_size),     # hosts per template batch
+        "-rl",       str(rate_limit),    # requests/sec cap
+        "-timeout",  str(timeout),       # per-request timeout
+        "-retries",  str(retries),       # 0 = fail fast, no retry
+        "-ss",       strategy,           # template-spray is faster for multi-target
+        "-etags",    excl_tags,          # skip headless (Chromium) templates
+        "-nh",                           # skip httpx probe (already done upstream)
+        "-duc",                          # disable update check at scan time
         "-silent",
         "-no-color",
-        # No -t flags: nuclei uses ~/nuclei-templates/ by default (all categories)
     ]
 
-    # Large timeout: concurrency × timeout is an approximation
-    scan_timeout = concurrency * timeout * 60
-    log.info("[nuclei] Running scan (severity=%s, concurrency=%d) …", severity, concurrency)
+    # Conservative scan timeout: proportional to concurrency × timeout, floored at 1 hour
+    scan_timeout = max(concurrency * timeout * 30, 3600)
+    log.info(
+        "[nuclei] Scan started — severity=%s  concurrency=%d  rate=%d/s  timeout=%ds  strategy=%s",
+        severity, concurrency, rate_limit, timeout, strategy,
+    )
 
     result = run_command(cmd, timeout=scan_timeout)
 
