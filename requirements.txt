@@ -1,0 +1,13 @@
+# Automated Reconnaissance Framework — Python dependencies
+# External recon tools (subfinder, amass, nmap, nuclei, httpx, whatweb)
+# must be installed separately via their own package managers.
+
+# No third-party Python packages are strictly required for the core pipeline;
+# the framework intentionally uses only the Python standard library so it runs
+# on any Python 3.8+ installation without a virtualenv.
+
+# Optional: install these for enhanced reporting / future extensions
+# rich>=13.0          # beautiful terminal output
+# jinja2>=3.0         # HTML report generation
+# python-nmap>=0.7    # programmatic nmap XML parsing
+# requests>=2.31      # lightweight HTTP probing helper
