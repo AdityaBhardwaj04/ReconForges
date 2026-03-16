@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # =============================================================================
-# install.sh — Automated Recon Framework setup script
+# install.sh — ReconForges setup script
 #
-# Installs all external tool dependencies on Debian/Ubuntu/Kali systems.
+# Installs all external tool dependencies on Debian/Ubuntu/Kali systems
+# and registers the `ReconForges` CLI command via pip.
 #
 # Usage:
 #   bash install.sh                  # full install
-#   bash install.sh --no-go-tools    # skip Go-based tools (subfinder etc.)
+#   bash install.sh --no-go-tools    # skip Go-based tools (subfinder, katana, etc.)
 #   bash install.sh --no-apt         # skip apt packages (nmap, whatweb)
 #   bash install.sh --no-python-pkgs # skip optional Python packages
 # =============================================================================
@@ -85,7 +86,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Go-based tools: subfinder, httpx, nuclei, amass
+# Go-based tools: subfinder, httpx, katana, nuclei, amass
 # ---------------------------------------------------------------------------
 if [[ $SKIP_GO -eq 0 ]]; then
     section "Installing Go-based tools"
@@ -100,6 +101,7 @@ if [[ $SKIP_GO -eq 0 ]]; then
         declare -A GO_TOOLS=(
             ["subfinder"]="github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest"
             ["httpx"]="github.com/projectdiscovery/httpx/cmd/httpx@latest"
+            ["katana"]="github.com/projectdiscovery/katana/cmd/katana@latest"
             ["nuclei"]="github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest"
             ["amass"]="github.com/owasp-amass/amass/v4/...@master"
         )
@@ -130,13 +132,36 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# ReconForges CLI — register the `ReconForges` command via pip
+# ---------------------------------------------------------------------------
+section "Installing ReconForges CLI command"
+
+if command -v pip3 &>/dev/null; then
+    # Use --break-system-packages on newer Debian/Ubuntu/Kali where PEP 668
+    # restricts system-wide pip installs; the flag is safe here because we
+    # are only installing our own package.
+    pip3 install --quiet --break-system-packages -e "$SCRIPT_DIR" \
+        && info "ReconForges CLI installed — run: ReconForges -u example.com" \
+        || {
+            # Fallback: try without the flag (older pip)
+            pip3 install --quiet -e "$SCRIPT_DIR" \
+                && info "ReconForges CLI installed — run: ReconForges -u example.com" \
+                || warn "pip install failed — use 'python3 recon_framework/main.py -u <target>' instead."
+        }
+else
+    warn "pip3 not found — skipping ReconForges CLI registration."
+fi
+
+# ---------------------------------------------------------------------------
 # Optional Python packages: networkx + matplotlib (for graph generation)
 # ---------------------------------------------------------------------------
 if [[ $SKIP_PY -eq 0 ]]; then
-    section "Installing optional Python packages"
+    section "Installing optional Python packages (graph generation)"
 
     if command -v pip3 &>/dev/null; then
-        pip3 install --quiet networkx matplotlib \
+        pip3 install --quiet --break-system-packages networkx matplotlib \
+            && info "networkx and matplotlib installed (graph generation enabled)." \
+            || pip3 install --quiet networkx matplotlib \
             && info "networkx and matplotlib installed (graph generation enabled)." \
             || warn "pip install failed — graph generation (--graph) will be unavailable."
     else
@@ -155,8 +180,9 @@ ALL_OK=1
 declare -A TOOLS=(
     ["subfinder"]="Subdomain enumeration (ProjectDiscovery)"
     ["amass"]="Subdomain enumeration (OWASP)"
-    ["nmap"]="Port scanning"
     ["httpx"]="Live host detection (ProjectDiscovery)"
+    ["katana"]="Web crawling — JS-aware (ProjectDiscovery)"
+    ["nmap"]="Port scanning"
     ["whatweb"]="Technology detection"
     ["nuclei"]="Vulnerability scanning (ProjectDiscovery)"
 )
@@ -181,6 +207,8 @@ fi
 # Usage hint
 # ---------------------------------------------------------------------------
 section "You're ready to run"
-echo -e "  ${BOLD}cd \"$SCRIPT_DIR/recon_framework\"${NC}"
-echo -e "  ${BOLD}python3 main.py -d example.com --html-report --json${NC}"
+echo -e "  ${BOLD}ReconForges -u example.com${NC}"
+echo -e "  ${BOLD}ReconForges -u example.com --depth 3 --threads 10${NC}"
+echo -e "  ${BOLD}ReconForges -u example.com -o results/ --html-report --json${NC}"
+echo -e "  ${BOLD}ReconForges --list-stages${NC}"
 echo ""
