@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# ---------------------------------------------------------------------------
+# Project metadata
+# ---------------------------------------------------------------------------
+
+[project]
+name = "reconforges"
+version = "1.0.0"
+description = "Automated Reconnaissance & Attack Surface Discovery Framework"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.8"
+
+# No third-party Python deps — core pipeline uses stdlib only.
+# Uncomment optional extras below if you want enhanced reporting.
+dependencies = []
+
+[project.optional-dependencies]
+reporting = [
+    "networkx>=3.0",     # recon asset graph (--graph)
+    "matplotlib>=3.7",   # recon asset graph (--graph)
+]
+
+# ---------------------------------------------------------------------------
+# Console script — this is what makes `ReconForges` a real shell command
+# ---------------------------------------------------------------------------
+
+[project.scripts]
+ReconForges = "recon_framework.main:main"
+
+# ---------------------------------------------------------------------------
+# Package discovery
+# ---------------------------------------------------------------------------
+
+[tool.setuptools.packages.find]
+where   = ["."]
+include = ["recon_framework*"]

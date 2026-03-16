@@ -3,10 +3,12 @@ main.py - CLI entry point and pipeline orchestrator for ReconForges.
 
 Usage
 -----
-    python main.py -d example.com
-    python main.py -d example.com --stages subdomain_enum host_discovery
-    python main.py -d example.com --output /tmp/recon_out --skip vuln_scan
-    python main.py -d example.com --list-stages
+    ReconForges -u example.com
+    ReconForges -u example.com --depth 3 --threads 10
+    ReconForges -u example.com -o results/
+    ReconForges -u example.com --stages subdomain_enum host_discovery
+    ReconForges -u example.com --output /tmp/recon_out --skip vuln_scan
+    ReconForges --list-stages
 """
 
 import argparse
@@ -256,24 +258,27 @@ class ReconPipeline:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="reconforges",
+        prog="ReconForges",
         description="ReconForges — Automated Reconnaissance & Attack Surface Discovery Framework. "
                     "Orchestrates Subfinder, Amass, Nmap, WhatWeb, and Nuclei.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python main.py -d example.com
-  python main.py -d example.com --stages subdomain_enum host_discovery port_scan
-  python main.py -d example.com --skip vuln_scan
-  python main.py -d example.com --output /tmp/pentest_results
-  python main.py --list-stages
-  python main.py --no-banner -d example.com
+  ReconForges -u example.com
+  ReconForges -u example.com --depth 3 --threads 10
+  ReconForges -u example.com -o results/
+  ReconForges -u example.com --stages subdomain_enum host_discovery port_scan
+  ReconForges -u example.com --skip vuln_scan
+  ReconForges -u example.com --output /tmp/pentest_results
+  ReconForges --list-stages
+  ReconForges --no-banner -u example.com
         """,
     )
 
     parser.add_argument(
-        "-d", "--domain",
+        "-u", "-d", "--url", "--domain",
         metavar="TARGET",
+        dest="domain",
         help="Target domain or IP address (e.g. example.com)",
     )
     parser.add_argument(
@@ -294,7 +299,7 @@ Examples:
         help="Skip these stages.",
     )
     parser.add_argument(
-        "--output",
+        "-o", "--output",
         metavar="DIR",
         default=None,
         help="Override the output directory (default: ./output)",
@@ -310,13 +315,20 @@ Examples:
         help="Suppress the ASCII banner.",
     )
 
-    # -- Parallelism ---------------------------------------------------------
+    # -- Parallelism / crawler controls --------------------------------------
     parser.add_argument(
         "--threads",
         metavar="N",
         type=int,
         default=None,
         help="Parallel worker count for port_scan and tech_detection (default: 5).",
+    )
+    parser.add_argument(
+        "--depth",
+        metavar="N",
+        type=int,
+        default=None,
+        help="Web crawler link-hop depth (default: 3).",
     )
 
     # -- Scope controls ------------------------------------------------------
@@ -387,6 +399,9 @@ def main() -> int:
         cfg.PARALLEL["workers"]          = args.threads
         cfg.PORT_SCAN["workers"]         = args.threads
         cfg.TECH_DETECTION["workers"]    = args.threads
+
+    if args.depth is not None:
+        cfg.CRAWLER["depth"] = args.depth
 
     if args.rate_limit is not None:
         cfg.SCOPE["rate_limit"] = args.rate_limit
