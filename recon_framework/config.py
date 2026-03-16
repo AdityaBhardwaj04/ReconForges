@@ -48,15 +48,20 @@ def _resolve_tool(env_var: str, name: str, prefer_gobin: bool = False) -> str:
 # ---------------------------------------------------------------------------
 
 OUTPUT_FILES = {
-    "subdomains":        os.path.join(OUTPUT_DIR, "subdomains.txt"),
-    "live_hosts":        os.path.join(OUTPUT_DIR, "live_hosts.txt"),
-    "port_scan":         os.path.join(OUTPUT_DIR, "port_scan_results.txt"),
-    "tech_detection":    os.path.join(OUTPUT_DIR, "tech_detection.txt"),
-    "vulnerabilities":   os.path.join(OUTPUT_DIR, "vulnerability_report.txt"),
+    "subdomains":           os.path.join(OUTPUT_DIR, "subdomains.txt"),
+    "live_hosts":           os.path.join(OUTPUT_DIR, "live_hosts.txt"),
+    # Web crawler outputs (produced by the web_crawler stage)
+    "crawler_urls":         os.path.join(OUTPUT_DIR, "crawler_urls.txt"),
+    "crawler_parameters":   os.path.join(OUTPUT_DIR, "crawler_parameters.txt"),
+    "crawler_js_files":     os.path.join(OUTPUT_DIR, "crawler_js_files.txt"),
+    "crawler_endpoints":    os.path.join(OUTPUT_DIR, "crawler_endpoints.txt"),
+    "port_scan":            os.path.join(OUTPUT_DIR, "port_scan_results.txt"),
+    "tech_detection":       os.path.join(OUTPUT_DIR, "tech_detection.txt"),
+    "vulnerabilities":      os.path.join(OUTPUT_DIR, "vulnerability_report.txt"),
     # Post-pipeline report outputs
-    "report_html":       os.path.join(OUTPUT_DIR, "report.html"),
-    "report_json":       os.path.join(OUTPUT_DIR, "recon_results.json"),
-    "report_graph":      os.path.join(OUTPUT_DIR, "recon_graph.png"),
+    "report_html":          os.path.join(OUTPUT_DIR, "report.html"),
+    "report_json":          os.path.join(OUTPUT_DIR, "recon_results.json"),
+    "report_graph":         os.path.join(OUTPUT_DIR, "recon_graph.png"),
 }
 
 # ---------------------------------------------------------------------------
@@ -71,6 +76,7 @@ TOOL_PATHS = {
     "amass":      _resolve_tool("AMASS_PATH",      "amass",     prefer_gobin=True),
     "nuclei":     _resolve_tool("NUCLEI_PATH",     "nuclei",    prefer_gobin=True),
     "httpx":      _resolve_tool("HTTPX_PATH",      "httpx",     prefer_gobin=True),
+    "katana":     _resolve_tool("KATANA_PATH",     "katana",    prefer_gobin=True),
     # System tools: standard PATH resolution is fine
     "nmap":       _resolve_tool("NMAP_PATH",       "nmap"),
     "whatweb":    _resolve_tool("WHATWEB_PATH",    "whatweb"),
@@ -119,6 +125,45 @@ TECH_DETECTION = {
     "workers":     5,
 }
 
+CRAWLER = {
+    # Number of link-hops to follow from the start URL (depth 0)
+    "depth":              3,
+    # Simultaneous HTTP requests per host (Katana -c / Python BFS workers)
+    "concurrency":        10,
+    # Max requests per second per host  (Katana -rl / Python BFS rate-limit)
+    "rate_limit":         150,
+    # Per-request HTTP timeout in seconds
+    "timeout":            15,
+    # Maximum wall-clock crawl time per host in seconds (Katana -ct)
+    "crawl_timeout":      300,
+    # User-Agent sent with every request
+    "user_agent":         (
+        "Mozilla/5.0 (compatible; ReconForges/1.0; "
+        "+https://github.com/AdityaBhardwaj04/ReconForges)"
+    ),
+    # Passive JS crawling: extract endpoints from downloaded .js files (Katana -jc)
+    "js_crawl":           True,
+    # Extract HTML form action URLs (Katana -form-extraction)
+    "form_extraction":    True,
+    # Headless JS rendering via Chromium — much slower, requires Chromium installed
+    # Set True only when targets use heavy client-side rendering (SPAs)
+    "headless":           False,
+    # Hard cap on URLs crawled per host; 0 = unlimited
+    "max_urls_per_host":  5000,
+    # Number of hosts crawled in parallel (outer ThreadPoolExecutor)
+    "workers":            3,
+    # HTTP retry count on transient errors (Python BFS only)
+    "retry":              2,
+    # File extensions to skip entirely (images, fonts, media, archives)
+    "exclude_extensions": [
+        "png", "jpg", "jpeg", "gif", "bmp", "ico", "svg", "webp", "tiff",
+        "css", "woff", "woff2", "ttf", "eot", "otf",
+        "mp4", "mp3", "mpeg", "ogg", "wav", "webm", "avi", "mov",
+        "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+        "zip", "tar", "gz", "rar", "7z",
+    ],
+}
+
 VULN_SCAN = {
     # nuclei template severity filter  (info,low,medium,high,critical)
     "severity":     "low,medium,high,critical",
@@ -158,10 +203,11 @@ SCOPE = {
 # ---------------------------------------------------------------------------
 
 PIPELINE = {
-    # stages to run; remove a key to skip that stage
+    # stages to run in order; pass --skip web_crawler to omit it
     "stages": [
         "subdomain_enum",
         "host_discovery",
+        "web_crawler",      # ← crawls live hosts, feeds enriched targets to vuln_scan
         "port_scan",
         "tech_detection",
         "vuln_scan",

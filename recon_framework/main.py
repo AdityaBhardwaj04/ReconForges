@@ -35,6 +35,7 @@ log = get_logger("main")
 STAGE_MAP = {
     "subdomain_enum":  "modules.subdomain_enum",
     "host_discovery":  "modules.host_discovery",
+    "web_crawler":     "modules.web_crawler",    # after host_discovery; before port_scan
     "port_scan":       "modules.port_scan",
     "tech_detection":  "modules.tech_detection",
     "vuln_scan":       "modules.vuln_scan",
@@ -114,8 +115,9 @@ class ReconPipeline:
         results: dict  = {"domain": self.domain, "stages": {}}
 
         # Accumulate inter-stage data
-        subdomains: List[str] = []
-        live_hosts: List[str] = []
+        subdomains:    List[str] = []
+        live_hosts:    List[str] = []
+        crawler_urls:  List[str] = []   # populated by web_crawler; fed into vuln_scan
 
         for stage_name in STAGE_ORDER:
             if stage_name not in self.stages:
@@ -160,6 +162,10 @@ class ReconPipeline:
                         data = data[:max_hosts]
                     live_hosts = data
 
+                elif stage_name == "web_crawler":
+                    data = module.run(live_hosts)
+                    crawler_urls = data
+
                 elif stage_name == "port_scan":
                     data = module.run(live_hosts)
 
@@ -167,7 +173,17 @@ class ReconPipeline:
                     data = module.run(live_hosts)
 
                 elif stage_name == "vuln_scan":
-                    data = module.run(live_hosts)
+                    # Prefer crawler-discovered endpoints over bare live hosts:
+                    # crawler_urls are full URLs (scheme+host+path) which give
+                    # Nuclei much more precise targets than hostnames alone.
+                    targets = crawler_urls if crawler_urls else live_hosts
+                    if crawler_urls:
+                        log.info(
+                            "vuln_scan: using %d crawler-discovered endpoints "
+                            "as Nuclei targets (instead of %d bare live hosts).",
+                            len(crawler_urls), len(live_hosts),
+                        )
+                    data = module.run(targets)
 
                 else:
                     log.warning("Unknown stage '%s' — skipped.", stage_name)
